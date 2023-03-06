@@ -1,3 +1,4 @@
+import argparse
 import os
 import random
 import threading
@@ -11,9 +12,11 @@ from StreamDeck.ImageHelpers import PILHelper
 
 
 class Game:
-    def __init__(self, deck, wrap=False):
+    def __init__(self, deck, wrap, speed, speedchange):
         self.deck = deck
         self.wrap = wrap
+        self.speed = speed
+        self.speedChange = speedchange
         
         self.rows, self.cols = deck.key_layout()
         self.allPositions = range(0, deck.key_count())
@@ -32,7 +35,6 @@ class Game:
         self.nextDirection = 'right'
         self.length = 2
         self.fruitPos = self.placeFruit()
-        self.speed = 1
 
 
     def getCoordinate(self, key):
@@ -93,7 +95,7 @@ class Game:
         if nextIndex == self.fruitPos:
             self.length += 1
             self.fruitPos = self.placeFruit()
-            self.speed -= 0.1
+            self.speed -= self.speedChange
 
         return True
 
@@ -154,40 +156,55 @@ class Game:
         return nextPos
 
 
-def key_change_callback(deck, key, state):
-    # Only act on keyUp events
-    if state == False:
-        GAMESTATE.setDirection(key) 
-
-
 if __name__ == "__main__":
-    deck = DeviceManager().enumerate()[0]
+    parser = argparse.ArgumentParser(description="Snake!")
+    parser.add_argument('--edgewrap',
+                        action='store_true',
+                        default=False,
+                        help="Don't die on hitting the edge"
+                             ' (Default: False)')
+    parser.add_argument('--tick-length',
+                        metavar='<float>',
+                        type=float,
+                        default=1.0,
+                        help='Initial time per step in seconds'
+                             ' (Default: 1.0)')
+    parser.add_argument('--speedup',
+                        metavar='<float>',
+                        type=float,
+                        default=0.05,
+                        help='When eating a fruit, speed up by this many'
+                             ' seconds (Default: 0.05)')
+    args = parser.parse_args()
 
+    deck = DeviceManager().enumerate()[0]
     deck.open()
     deck.reset()
+    deck.set_brightness(100)
 
     print("Opened '{}' device (serial number: '{}')".format(
         deck.deck_type(), deck.get_serial_number()))
 
-    deck.set_brightness(100)
+    GAMESTATE = Game(deck, args.edgewrap, args.tick_length, args.speedup)
 
-    GAMESTATE = Game(deck, True)
-            
-    # Register callback function for when a key state changes.
+    def key_change_callback(deck, key, state):
+        # Only act on keyUp events
+        if state == False:
+            GAMESTATE.setDirection(key)
+
     deck.set_key_callback(key_change_callback)
 
     running = True
     while running:
         running = GAMESTATE.update()
-        GAMESTATE.draw()
         if not running:
-            deck.reset()
             deck.close()
         else:
+            GAMESTATE.draw()
             time.sleep(GAMESTATE.speed)
     
-    # Wait until all application threads have terminated (for this example,
-    # this is when all deck handles are closed).
+    # Wait until all application threads have terminated
+    # (for this example, this is when all deck handles are closed).
     for t in threading.enumerate():
         try:
             t.join()
