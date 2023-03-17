@@ -6,7 +6,6 @@ import time
 
 from collections import deque
 
-from PIL import Image, ImageOps
 from StreamDeck.DeviceManager import DeviceManager
 from StreamDeck.ImageHelpers import PILHelper
 
